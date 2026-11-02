@@ -1,10 +1,12 @@
-import React, { useEffect, useState } from 'react';
-import { Card, Typography, Input, Button, Spin, message, Progress, Divider, Alert, Tag } from 'antd';
+import React, { useEffect, useRef, useState } from 'react';
+import { Card, Typography, Input, Button, Spin, message, Progress, Divider, Alert, Tag, Radio } from 'antd';
 import { FileTextOutlined, RobotOutlined, SendOutlined } from '@ant-design/icons';
 import FeatureRadarChart from '../components/FeatureRadarChart';
 import FeatureContributionTable from '../components/FeatureContributionTable';
 import FeatureTable from '../components/FeatureTable';
-import { checkHealth, detectAIGC } from '../services/api';
+import HistoryPanel, { formatHistoryTime } from '../components/HistoryPanel';
+import { checkHealth, detectAIGC, getModels } from '../services/api';
+import { addHistory, clearHistory, createHistoryEntry, deleteHistory, HISTORY_STORAGE_KEY, readHistory } from '../services/history';
 
 const { Title, Paragraph } = Typography;
 const { TextArea } = Input;
@@ -13,6 +15,37 @@ const HomePage = () => {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [minLength, setMinLength] = useState(50);
+  const [models, setModels] = useState([]);
+  const [model, setModel] = useState('default');
+  const [modelsLoading, setModelsLoading] = useState(true);
+  const [modelsError, setModelsError] = useState('');
+  const [detectionError, setDetectionError] = useState('');
+  const [historyState, setHistoryState] = useState(() => {
+    try {
+      return { entries: readHistory(), error: '' };
+    } catch {
+      return { entries: [], error: '历史记录读取失败，可清空历史后重试，仍可正常检测。' };
+    }
+  });
+  const [viewedHistory, setViewedHistory] = useState(null);
+  const resultRef = useRef(null);
+
+  useEffect(() => {
+    const syncHistory = (event) => {
+      if (event.key !== HISTORY_STORAGE_KEY && event.key !== null) return;
+      try {
+        setHistoryState({ entries: readHistory(), error: '' });
+      } catch {
+        setHistoryState((previous) => ({ ...previous, error: '历史记录同步失败，请刷新页面重试。' }));
+      }
+    };
+    window.addEventListener('storage', syncHistory);
+    return () => window.removeEventListener('storage', syncHistory);
+  }, []);
+
+  useEffect(() => {
+    if (result && !loading) resultRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+  }, [result, loading, viewedHistory]);
 
   useEffect(() => {
     let mounted = true;
@@ -25,6 +58,22 @@ const HomePage = () => {
       })
       .catch(() => {
         // 忽略健康检查失败，使用本地默认值
+      });
+    getModels()
+      .then((data) => {
+        if (mounted) {
+          if (!Array.isArray(data.models) || data.models.length === 0) {
+            throw new Error('模型列表为空');
+          }
+          setModels(data.models);
+          setModel(data.default_model);
+        }
+      })
+      .catch(() => {
+        if (mounted) setModelsError('模型列表加载失败，请刷新页面重试');
+      })
+      .finally(() => {
+        if (mounted) setModelsLoading(false);
       });
     return () => {
       mounted = false;
@@ -48,13 +97,52 @@ const HomePage = () => {
 
     try {
       setLoading(true);
-      const data = await detectAIGC(cleaned, true);
+      setResult(null);
+      setDetectionError('');
+      setViewedHistory(null);
+      const data = await detectAIGC(cleaned, true, model);
       setResult(data);
+      try {
+        const modelName = models.find((item) => item.key === model)?.name || '服务默认模型';
+        const entry = createHistoryEntry(cleaned, model, modelName, data);
+        setHistoryState({ entries: addHistory(entry), error: '' });
+      } catch {
+        setHistoryState((previous) => ({
+          ...previous,
+          error: '检测成功，但历史记录保存失败。浏览器存储可能已满或不可用，本次结果仍可查看。',
+        }));
+      }
     } catch (error) {
       console.error('检测出错:', error);
-      message.error(error.message || '检测失败，请稍后重试');
+      const errorMessage = error.message || '检测失败，请稍后重试';
+      setDetectionError(errorMessage);
+      message.error(errorMessage);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleViewHistory = (entry) => {
+    setText(entry.text);
+    if (models.some((item) => item.key === entry.model)) setModel(entry.model);
+    setResult(entry.result);
+    setDetectionError('');
+    setViewedHistory(entry);
+  };
+
+  const handleDeleteHistory = (id) => {
+    try {
+      setHistoryState({ entries: deleteHistory(id), error: '' });
+    } catch {
+      setHistoryState((previous) => ({ ...previous, error: '历史记录删除失败，请检查浏览器存储后重试。' }));
+    }
+  };
+
+  const handleClearHistory = () => {
+    try {
+      setHistoryState({ entries: clearHistory(), error: '' });
+    } catch {
+      setHistoryState((previous) => ({ ...previous, error: '历史记录清空失败，请检查浏览器存储后重试。' }));
     }
   };
 
@@ -82,9 +170,31 @@ const HomePage = () => {
       </Paragraph>
 
       <Card className="mb-20">
+        <div style={{ marginBottom: 16 }}>
+          <div id="detection-model-label" style={{ marginBottom: 8 }}>
+            检测模型 {modelsLoading && <Spin size="small" />}
+          </div>
+          <Radio.Group
+            aria-labelledby="detection-model-label"
+            name="detection-model"
+            className="model-options"
+            value={model}
+            optionType="button"
+            buttonStyle="solid"
+            size="large"
+            disabled={loading || modelsLoading || Boolean(modelsError)}
+            options={models.map((item) => ({ value: item.key, label: item.name }))}
+            onChange={(event) => { setModel(event.target.value); setResult(null); setDetectionError(''); setViewedHistory(null); }}
+          />
+          <Paragraph type="secondary" style={{ marginTop: 8, marginBottom: 0 }}>
+            {models.find((item) => item.key === model)?.description}
+          </Paragraph>
+          {modelsError && <Alert type="error" showIcon message={modelsError} style={{ marginTop: 8 }} />}
+        </div>
         <TextArea
           rows={10}
           value={text}
+          disabled={loading}
           onChange={handleTextChange}
           placeholder={`请输入需要检测的文本内容（至少${minLength}个字）...`}
         />
@@ -95,6 +205,7 @@ const HomePage = () => {
           type="primary"
           icon={<SendOutlined />}
           loading={loading}
+          disabled={modelsLoading || Boolean(modelsError)}
           onClick={handleSubmit}
           style={{ marginTop: 16, float: 'right' }}
         >
@@ -103,19 +214,38 @@ const HomePage = () => {
         <div style={{ clear: 'both' }}></div>
       </Card>
 
+      {detectionError && !loading && (
+        <Alert type="error" showIcon message={detectionError} style={{ marginTop: 16 }} />
+      )}
+
       {loading && (
         <div className="text-center mt-20">
           <Spin size="large" />
-          <Paragraph style={{ marginTop: 16 }}>正在分析文本，请稍候...</Paragraph>
+          <Paragraph style={{ marginTop: 16 }}>正在加载所选模型并分析文本，首次使用可能需要下载，请稍候...</Paragraph>
         </div>
       )}
 
+      <HistoryPanel
+        entries={historyState.entries}
+        error={historyState.error}
+        disabled={loading || modelsLoading}
+        onView={handleViewHistory}
+        onDelete={handleDeleteHistory}
+        onClear={handleClearHistory}
+      />
+
       {result && !loading && (
-        <Card className="result-card">
+        <Card className="result-card" ref={resultRef} style={{ scrollMarginTop: 90 }}>
           <div className="result-header">
             <Title level={3}>检测结果</Title>
             <Paragraph>处理时间: {result.processing_time}秒</Paragraph>
           </div>
+          {viewedHistory && (
+            <Paragraph type="secondary">历史结果 · {formatHistoryTime(viewedHistory.createdAt)}</Paragraph>
+          )}
+          {result.selected_model && (
+            <Paragraph>检测模型：<Tag color="blue">{result.selected_model.name}</Tag></Paragraph>
+          )}
 
           {Array.isArray(result.warnings) && result.warnings.length > 0 && (
             <Alert
@@ -140,7 +270,7 @@ const HomePage = () => {
                 percent={result.aigc_score}
                 format={(percent) => `${percent}%`}
                 strokeColor={getScoreColor(result.aigc_score, result.label, result.score_threshold)}
-                width={120}
+                size={120}
               />
               <div style={{ marginTop: 16 }}>
                 <Title

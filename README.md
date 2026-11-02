@@ -65,6 +65,25 @@ python run.py
 
 如果存在 `frontend/build`，可直接在同端口访问 Web UI。
 
+网页中的“检测模型”可选择：
+
+- 默认 · 轻量模型：使用内置分类器，在 CPU 上运行。
+- 中文 · zhV3：`yuchuantian/AIGC_detector_zhv3`。
+- 英文 · n4.0：`abhi099k/ai-text-detector-v-n4.0`，主要适用于英文。
+
+选择模型后点击“开始检测”，无需重启服务。Transformer 模型首次使用时按需下载和加载，
+之后在当前服务进程中缓存；需要可访问 Hugging Face 的网络或完整的本地缓存。
+有可用 CUDA 时默认使用 GPU，也可用 `AIGC_TRANSFORMER_DEVICE=cpu` 启动以使用 CPU。
+加载或推理失败会明确报错，不会将轻量模型的结果作为所选 Transformer 的结果返回。
+检测结果会标出实际使用的模型。切换选择会清除上一次结果，保留输入文本，方便比较。
+
+每次成功检测后，网页会将原文、检测时间、所用模型与完整结果保存到当前浏览器，
+最多保留最近 50 条；刷新页面后仍可在“检测历史”中查看。查看历史会恢复原文和模型选择，
+展示当时保存的结果，不会重新调用模型。失败的检测不会写入历史。
+支持单条删除和确认清空全部历史；这些操作只删除历史记录，保留当前输入及已展示的结果。
+历史按浏览器和站点地址分别保存，不会在不同设备、浏览器或端口间自动同步。
+浏览器存储不可用或空间不足时会明确提示，当前检测结果仍正常显示。
+
 ### 3) 接口调用示例
 
 ```bash
@@ -72,6 +91,11 @@ curl -X POST http://127.0.0.1:5000/api/detect \
   -H "Content-Type: application/json" \
   -d '{"text":"这里是一段足够长的待检测文本，用于验证接口。","include_details":true}'
 ```
+
+`GET /api/models` 返回可选模型。检测请求可增加 `"model":"default"`、`"model":"zh"`
+或 `"model":"en"`，所选 Transformer 的评分权重固定为 1；响应的 `selected_model` 包含
+实际模型名称、ID 和设备。选择只作用于本次请求，不修改其他用户的模型选择。
+不传 `model` 时仍沿用服务启动时的模型配置；`/health` 描述的也是该启动配置。
 
 ## 内置模型说明
 
@@ -133,6 +157,7 @@ python backend/scripts/prepare_massive_open_mix.py \
 ## API
 
 - 健康检查：`GET /health`
+- 可选模型：`GET /api/models`
 - 检测接口：`POST /api/detect`
 
 ## 测试

@@ -10,13 +10,16 @@ from flask import Blueprint, jsonify, request
 
 try:
     from backend.models.detector import AIGCDetector
+    from backend.models.registry import DetectorRegistry, ModelUnavailableError
 except ImportError:  # 兼容从backend目录直接运行
     from models.detector import AIGCDetector
+    from models.registry import DetectorRegistry, ModelUnavailableError
 
 
 api_bp = Blueprint("api", __name__)
 logger = logging.getLogger(__name__)
 detector = AIGCDetector.from_env()
+model_registry = DetectorRegistry(detector)
 _rate_limit_lock = Lock()
 _request_windows: Dict[str, deque] = defaultdict(deque)
 
@@ -75,6 +78,11 @@ def _error_response(message: str, status_code: int, code: str) -> tuple:
     return jsonify(payload), status_code
 
 
+@api_bp.route("/models", methods=["GET"])
+def list_models():
+    return jsonify(model_registry.options())
+
+
 @api_bp.route("/detect", methods=["POST"])
 def detect_aigc():
     start_time = time.time()
@@ -87,6 +95,8 @@ def detect_aigc():
         return _error_response("请求必须是JSON格式", 415, "invalid_content_type")
 
     payload: Dict[str, Any] = request.get_json(silent=True) or {}
+    if not isinstance(payload, dict):
+        return _error_response("请求内容必须是 JSON 对象", 400, "invalid_payload")
     text = payload.get("text")
     include_details = _parse_bool(payload.get("include_details", False), default=False)
 
@@ -101,7 +111,10 @@ def detect_aigc():
         )
 
     try:
-        result = detector.analyze(text, include_details=include_details)
+        if "model" in payload:
+            result = model_registry.analyze(payload["model"], text, include_details=include_details)
+        else:
+            result = detector.analyze(text, include_details=include_details)
         processing_time = round(time.time() - start_time, 3)
 
         response = {
@@ -116,15 +129,20 @@ def detect_aigc():
         }
         if include_details and "details" in result:
             response["details"] = result["details"]
+        if "selected_model" in result:
+            response["selected_model"] = result["selected_model"]
 
         logger.info(
-            "检测完成 score=%.2f confidence=%.2f mode=%s processing_time=%.3fs",
+            "检测完成 model=%s score=%.2f confidence=%.2f mode=%s processing_time=%.3fs",
+            result.get("selected_model", {}).get("key", "server_default"),
             float(result["aigc_score"]),
             float(result["confidence"]),
             result["model_mode"],
             processing_time,
         )
         return jsonify(response)
+    except ModelUnavailableError as exc:
+        return _error_response(str(exc), 503, "model_unavailable")
     except ValueError as exc:
         return _error_response(str(exc), 400, "validation_error")
     except Exception as exc:

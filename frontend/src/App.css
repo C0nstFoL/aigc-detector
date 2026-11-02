@@ -50,6 +50,34 @@
   border-radius: 8px;
 }
 
+.ant-radio-group.model-options {
+  display: flex;
+  flex-wrap: nowrap;
+  width: 100%;
+}
+
+.model-options .ant-radio-button-wrapper {
+  flex: 1;
+  min-width: 0;
+  padding-inline: 8px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+@media (max-width: 480px) {
+  .model-options .ant-radio-button-wrapper {
+    padding-inline: 4px;
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 360px) {
+  .model-options .ant-radio-button-wrapper {
+    padding-inline: 2px;
+    font-size: 11px;
+  }
+}
+
 .result-header {
   display: flex;
   justify-content: space-between;
@@ -80,4 +108,4 @@
 .chart-container {
   height: 300px;
   margin-top: 24px;
-} 
+}

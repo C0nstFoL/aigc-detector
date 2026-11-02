@@ -12,11 +12,12 @@ const api = axios.create({
  * 检测文本的AIGC率
  * @param {string} text - 需要检测的文本
  * @param {boolean} includeDetails - 是否返回详细结果
+ * @param {string} model - default、zh 或 en；省略时使用服务启动配置
  * @returns {Promise} - 返回检测结果
  */
-export const detectAIGC = async (text, includeDetails = false) => {
+export const detectAIGC = async (text, includeDetails = false, model) => {
   try {
-    const response = await api.post('/api/detect', { text, include_details: includeDetails });
+    const response = await api.post('/api/detect', { text, include_details: includeDetails, model });
     return response.data;
   } catch (error) {
     console.error('API请求失败:', error);
@@ -26,6 +27,11 @@ export const detectAIGC = async (text, includeDetails = false) => {
       '请求失败，请稍后重试';
     throw new Error(message);
   }
+};
+
+export const getModels = async () => {
+  const response = await api.get('/api/models');
+  return response.data;
 };
 
 /**
