@@ -16,8 +16,42 @@
 
 ### 1) 安装依赖
 
+推荐使用 Conda（Python 3.12，与 CI 一致）：
+
+```bash
+conda env create -f environment.yml
+conda activate aigc-detector
+```
+
+环境包含后端、测试和训练依赖。Linux/Windows 默认安装 GPU 版
+PyTorch 2.10.0（CUDA 12.8），需要可用的 NVIDIA 显卡及兼容驱动；macOS 安装原生版本。
+内置模型使用的 scikit-learn 固定为 1.8.0。
+其他硬件可参考 [PyTorch 官方安装说明](https://pytorch.org/get-started/previous-versions/#v2100)。
+
+已有该环境时，可在项目根目录更新：
+
+```bash
+conda env update -f environment.yml
+```
+
+激活环境后，可检查 GPU 是否可用：
+
+```bash
+python -c "import torch; print('PyTorch:', torch.__version__); print('CUDA:', torch.version.cuda); print('GPU available:', torch.cuda.is_available())"
+```
+
+GPU 用于 Transformer 分支及其训练；默认的内置轻量模型仍使用 CPU。
+启用 Transformer 检测还需要准备对应权重，参见下方 Transformer 模型说明。
+
+也可以在已有的 Python 3.12 环境中直接安装：
+
 ```bash
 pip install -r requirements.txt
+```
+
+前端依赖需要另外安装（Node.js 20，与 CI 一致）：
+
+```bash
 cd frontend && npm install
 ```
 

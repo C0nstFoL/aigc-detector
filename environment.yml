@@ -1,0 +1,14 @@
+name: aigc-detector
+channels:
+  - defaults
+dependencies:
+  - python=3.12
+  - pip
+  - pip:
+      - -r requirements.txt
+      # Match the scikit-learn version embedded in the bundled model.
+      - scikit-learn==1.8.0
+      # NVIDIA GPU build for Linux/Windows; macOS uses its native build.
+      - --extra-index-url https://download.pytorch.org/whl/cu128
+      - "torch==2.10.0+cu128; sys_platform != 'darwin'"
+      - "torch==2.10.0; sys_platform == 'darwin'"
