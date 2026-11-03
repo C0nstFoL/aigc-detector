@@ -1,0 +1,16 @@
+{
+  "models": [
+    {
+      "key": "zh",
+      "repo_id": "yuchuantian/AIGC_detector_zhv3",
+      "revision": "47695ff451b32c225dd938f4f478f7fdc6aa6bb0",
+      "files": ["config.json", "tokenizer_config.json", "special_tokens_map.json", "vocab.txt", "pytorch_model.bin"]
+    },
+    {
+      "key": "en",
+      "repo_id": "abhi099k/ai-text-detector-v-n4.0",
+      "revision": "d092befefddaddf8538a487e9fa4f5ec34d227ce",
+      "files": ["config.json", "tokenizer_config.json", "special_tokens_map.json", "added_tokens.json", "spm.model", "tokenizer.json", "model.safetensors"]
+    }
+  ]
+}

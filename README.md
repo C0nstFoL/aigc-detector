@@ -97,6 +97,46 @@ curl -X POST http://127.0.0.1:5000/api/detect \
 实际模型名称、ID 和设备。选择只作用于本次请求，不修改其他用户的模型选择。
 不传 `model` 时仍沿用服务启动时的模型配置；`/health` 描述的也是该启动配置。
 
+## Docker GPU 部署（模型内置）
+
+需要 Docker Compose 和已配置的 NVIDIA Container Toolkit。镜像包含构建好的网页、
+内置轻量模型、中文 zhV3 和英文 n4.0 的完整推理权重，不需要挂载宿主机模型目录。
+
+```bash
+docker compose up -d --build
+docker compose ps
+docker compose logs -f app
+```
+
+默认访问 `http://127.0.0.1:5000`。可用 `AIGC_PORT=5001 docker compose up -d` 修改宿主机端口。
+服务使用 Gunicorn，单进程缓存模型，自动重启并提供容器健康检查。
+网页内继续支持中英文模型切换；容器默认离线推理，启动和切换模型均不需要下载。
+只有日志目录使用 Docker 卷。历史记录仍保存在浏览器，站点地址变化时不会自动迁移。
+
+首次构建需要下载基础镜像、CUDA 运行依赖和约 2.1 GB 的 Transformer 权重。
+权重版本固定在 [docker/model-manifest.json](./docker/model-manifest.json)，应用依赖固定在
+[docker/requirements.lock.txt](./docker/requirements.lock.txt)。如本机已下载过这两个模型，
+可先复用 Hugging Face 缓存，减少构建下载：
+
+```bash
+conda activate aigc-detector
+python docker/bundle_models.py --offline
+docker compose up -d --build
+```
+
+该命令只将指定模型文件复制到 Git 忽略的构建缓存；账号、令牌和其他模型不会进入镜像。
+没有本机缓存时，直接构建即可自动下载固定版本。构建需要代理时，可在 Git 忽略的
+`compose.override.yaml` 中设置 `build.args.HTTP_PROXY`、`build.args.HTTPS_PROXY`；
+Linux 上使用宿主机回环代理时可同时设置 `build.network: host`。运行时无需代理。
+
+验证镜像在无网络、无模型挂载条件下仍能完成三种模型检测和 GPU 推理：
+
+```bash
+docker run --rm --network none --gpus all aigc-detector:gpu python docker/smoke_test.py
+```
+
+停止服务用 `docker compose down`；更新代码后重新执行 `docker compose up -d --build`。
+
 ## 内置模型说明
 
 仓库已内置可直接使用的轻量已训练模型：

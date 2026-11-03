@@ -53,3 +53,9 @@ backend/logs/*
 # Others
 *.bak
 *.tmp
+
+# Docker model build cache and machine-specific build/proxy settings
+docker/model-cache/*
+!docker/model-cache/.gitkeep
+compose.override.yaml
+docker/wheel-cache/
